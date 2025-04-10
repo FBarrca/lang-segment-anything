@@ -2,27 +2,41 @@ import torch
 from PIL import Image
 from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
 
-from lang_sam.models.utils import DEVICE
+from lang_sam.models.utils import get_device_type
+
+device_type = get_device_type()
+DEVICE = torch.device(device_type)
+
+if torch.cuda.is_available():
+    torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
+    if torch.cuda.get_device_properties(0).major >= 8:
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+
 
 class GDINO:
-    def build_model(self, ckpt_path: str | None = None, device=DEVICE):
-        model_id = "IDEA-Research/grounding-dino-base" if ckpt_path is None else ckpt_path
-        self.processor = AutoProcessor.from_pretrained(model_id)
-        self.model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(
-            device
+    def __init__(self):
+        self.build_model()
+
+    def build_model(self, ckpt_path: str | None = None):
+        ckpt_path = "/home/fbarraganc/.cache/huggingface/hub/models/IDEA-Research/grounding-dino-base/snapshots/12bdfa3120f3e7ec7b434d90674b3396eccf88eb"
+        model_id = "IDEA-Research/grounding-dino-base"
+        self.processor = AutoProcessor.from_pretrained(ckpt_path)
+        self.model = AutoModelForZeroShotObjectDetection.from_pretrained(ckpt_path).to(
+            DEVICE
         )
 
     def predict(
         self,
-        images_pil: list[Image.Image],
-        texts_prompt: list[str],
+        pil_images: list[Image.Image],
+        text_prompt: list[str],
         box_threshold: float,
         text_threshold: float,
     ) -> list[dict]:
-        for i, prompt in enumerate(texts_prompt):
+        for i, prompt in enumerate(text_prompt):
             if prompt[-1] != ".":
-                texts_prompt[i] += "."
-        inputs = self.processor(images=images_pil, text=texts_prompt, return_tensors="pt").to(self.model.device)
+                text_prompt[i] += "."
+        inputs = self.processor(images=pil_images, text=text_prompt, return_tensors="pt").to(DEVICE)
         with torch.no_grad():
             outputs = self.model(**inputs)
 
@@ -31,7 +45,7 @@ class GDINO:
             inputs.input_ids,
             box_threshold=box_threshold,
             text_threshold=text_threshold,
-            target_sizes=[k.size[::-1] for k in images_pil],
+            target_sizes=[k.size[::-1] for k in pil_images],
         )
         return results
 

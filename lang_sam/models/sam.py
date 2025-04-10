@@ -6,7 +6,16 @@ from omegaconf import OmegaConf
 from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 
-from lang_sam.models.utils import DEVICE
+from lang_sam.models.utils import get_device_type
+
+DEVICE = torch.device(get_device_type())
+
+if torch.cuda.is_available():
+    torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
+    if torch.cuda.get_device_properties(0).major >= 8:
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+
 
 SAM_MODELS = {
     "sam2.1_hiera_tiny": {
@@ -29,14 +38,14 @@ SAM_MODELS = {
 
 
 class SAM:
-    def build_model(self, sam_type: str, ckpt_path: str | None = None, device=DEVICE):
+    def build_model(self, sam_type: str, ckpt_path: str | None = None):
         self.sam_type = sam_type
         self.ckpt_path = ckpt_path
         cfg = compose(config_name=SAM_MODELS[self.sam_type]["config"], overrides=[])
         OmegaConf.resolve(cfg)
         self.model = instantiate(cfg.model, _recursive_=True)
         self._load_checkpoint(self.model)
-        self.model = self.model.to(device)
+        self.model = self.model.to(DEVICE)
         self.model.eval()
         self.mask_generator = SAM2AutomaticMaskGenerator(self.model)
         self.predictor = SAM2ImagePredictor(self.model)
@@ -46,8 +55,7 @@ class SAM:
             checkpoint_url = SAM_MODELS[self.sam_type]["url"]
             state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
         else:
-            checkpoint_url = self.ckpt_path  # Ensure checkpoint_url is defined
-            state_dict = torch.load(self.ckpt_path, map_location="cpu", weights_only=True)["model"]
+            state_dict = torch.load(self.ckpt_path, map_location="cpu", weights_only=True)
         try:
             model.load_state_dict(state_dict, strict=True)
         except Exception as e:

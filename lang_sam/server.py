@@ -8,13 +8,13 @@ from PIL import Image
 from lang_sam import LangSAM
 from lang_sam.utils import draw_image
 
-PORT = 8000
+PORT = 8020
 
 
 class LangSAMAPI(ls.LitAPI):
     def setup(self, device: str) -> None:
         """Initialize or load the LangSAM model."""
-        self.model = LangSAM(sam_type="sam2.1_hiera_small", device=device)
+        self.model = LangSAM(sam_type="sam2.1_hiera_small")
         print("LangSAM model initialized.")
 
     def decode_request(self, request) -> dict:
@@ -118,4 +118,4 @@ server = ls.LitServer(lit_api)
 
 if __name__ == "__main__":
     print(f"Starting LitServe and Gradio server on port {PORT}...")
-    server.run(port=PORT)
+    server.run(host="0.0.0.0", port=PORT)   

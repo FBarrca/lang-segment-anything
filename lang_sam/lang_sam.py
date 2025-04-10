@@ -3,17 +3,15 @@ from PIL import Image
 
 from lang_sam.models.gdino import GDINO
 from lang_sam.models.sam import SAM
-from lang_sam.models.utils import DEVICE
 
 
 class LangSAM:
-    def __init__(self, sam_type="sam2.1_hiera_small", ckpt_path: str | None = None, device=DEVICE):
+    def __init__(self, sam_type="sam2.1_hiera_small", ckpt_path: str | None = None):
         self.sam_type = sam_type
-
         self.sam = SAM()
-        self.sam.build_model(sam_type, ckpt_path, device=device)
+        self.sam.build_model(sam_type, ckpt_path)
         self.gdino = GDINO()
-        self.gdino.build_model(device=device)
+        self.gdino.build_model()
 
     def predict(
         self,
@@ -47,7 +45,6 @@ class LangSAM:
         sam_boxes = []
         sam_indices = []
         for idx, result in enumerate(gdino_results):
-            result = {k: (v.cpu().numpy() if hasattr(v, "numpy") else v) for k, v in result.items()}
             processed_result = {
                 **result,
                 "masks": [],
@@ -55,6 +52,8 @@ class LangSAM:
             }
 
             if result["labels"]:
+                processed_result["boxes"] = result["boxes"].cpu().numpy()
+                processed_result["scores"] = result["scores"].cpu().numpy()
                 sam_images.append(np.asarray(images_pil[idx]))
                 sam_boxes.append(processed_result["boxes"])
                 sam_indices.append(idx)
